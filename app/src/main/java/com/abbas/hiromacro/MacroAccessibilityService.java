@@ -3,15 +3,18 @@ package com.abbas.hiromacro;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MacroAccessibilityService extends AccessibilityService {
     private static volatile MacroAccessibilityService instance;
@@ -27,10 +30,57 @@ public class MacroAccessibilityService extends AccessibilityService {
     @Override public void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-        log("Accessibility service connected.");
+        log("Accessibility service connected. Volume + = START, Volume - = STOP.");
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) { }
+
+    @Override public boolean onKeyEvent(KeyEvent event) {
+        int key = event.getKeyCode();
+        if (key != KeyEvent.KEYCODE_VOLUME_UP && key != KeyEvent.KEYCODE_VOLUME_DOWN) {
+            return super.onKeyEvent(event);
+        }
+
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            if (key == KeyEvent.KEYCODE_VOLUME_UP) {
+                log("Volume + pressed: starting selected script.");
+                startSelectedScript();
+            } else {
+                log("Volume - pressed: stopping script.");
+                stopScript();
+            }
+        }
+        // Consume both key-down and key-up so the game does not also change volume.
+        return true;
+    }
+
+    private void startSelectedScript() {
+        String savedUri = getSharedPreferences("hiromacro", MODE_PRIVATE)
+                .getString("selected_script_uri", null);
+        if (savedUri == null || savedUri.isEmpty()) {
+            log("No saved script. Open HiroMacro and choose a script first.");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                StringBuilder source = new StringBuilder();
+                Uri uri = Uri.parse(savedUri);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        getContentResolver().openInputStream(uri), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) source.append(line).append('\n');
+                }
+                if (source.length() == 0) {
+                    log("Selected script is empty.");
+                    return;
+                }
+                startScript(source.toString());
+            } catch (Exception e) {
+                log("Could not load saved script: " + e.getMessage());
+            }
+        }, "HiroMacro-VolumeStart").start();
+    }
+
     @Override public void onInterrupt() { stopScript(); }
 
     public synchronized void startScript(String source) {
@@ -101,13 +151,13 @@ public class MacroAccessibilityService extends AccessibilityService {
         GestureDescription gesture = new GestureDescription.Builder().addStroke(stroke).build();
         boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
             @Override public void onCompleted(GestureDescription gestureDescription) {
-                log("Tap completed at " + x + "," + y);
+                log("Tap completed at " + x + ", " + y);
             }
             @Override public void onCancelled(GestureDescription gestureDescription) {
-                log("Tap cancelled at " + x + "," + y);
+                log("Tap cancelled at " + x + ", " + y);
             }
         }, main);
-        if (!accepted) log("Tap rejected at " + x + "," + y);
+        if (!accepted) log("Tap rejected at " + x + ", " + y);
     }
 
     private void log(String message) {
