@@ -6,12 +6,10 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +34,9 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         selected = new TextView(this);
-        selected.setText("No script selected");
+        String savedUri = getSharedPreferences("hiromacro", MODE_PRIVATE)
+                .getString("selected_script_uri", null);
+        selected.setText(savedUri == null ? "No script selected" : "A saved script is ready for volume-button start");
         selected.setPadding(0, 18, 0, 18);
         root.addView(selected);
 
@@ -49,6 +49,11 @@ public class MainActivity extends Activity {
         accessibility.setText("Enable Accessibility service");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         root.addView(accessibility);
+
+        TextView keyHelp = new TextView(this);
+        keyHelp.setText("Hardware controls (when Accessibility is enabled):\nVolume + : START saved script\nVolume - : STOP script");
+        keyHelp.setPadding(0, 10, 0, 10);
+        root.addView(keyHelp);
 
         Button start = new Button(this);
         start.setText("START");
@@ -83,13 +88,14 @@ public class MainActivity extends Activity {
 
         MacroAccessibilityService.setLogListener(this::note);
         setContentView(root);
-        note("Ready. Accessibility must be enabled before running scripts.");
+        note("Ready. Select a script, enable Accessibility, then use Volume + to start and Volume - to stop.");
     }
 
     private void chooseScript() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, PICK_SCRIPT);
     }
 
@@ -99,6 +105,11 @@ public class MainActivity extends Activity {
         Uri uri = data.getData();
         if (uri == null) return;
         try {
+            try {
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (SecurityException ignored) {
+                note("Provider did not grant a persistent read permission; reselect the script if needed after restart.");
+            }
             StringBuilder out = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                     getContentResolver().openInputStream(uri), StandardCharsets.UTF_8))) {
@@ -107,8 +118,10 @@ public class MainActivity extends Activity {
             }
             scriptUri = uri;
             scriptText = out.toString();
-            selected.setText("Selected: " + uri.getLastPathSegment());
-            note("Script loaded (" + scriptText.split("\\n").length + " lines).");
+            getSharedPreferences("hiromacro", MODE_PRIVATE).edit()
+                    .putString("selected_script_uri", uri.toString()).apply();
+            selected.setText("Selected: " + uri.getLastPathSegment() + " (saved)");
+            note("Script loaded and saved (" + scriptText.split("\\n").length + " lines).");
         } catch (Exception e) {
             note("Could not read script: " + e.getMessage());
         }
