@@ -149,21 +149,26 @@ public class MacroAccessibilityService extends AccessibilityService {
         }
     }
 
-    private void tap(int x, int y) {
+    private void tap(int x, int y) throws InterruptedException {
         Path path = new Path();
         path.moveTo(x, y);
         GestureDescription.StrokeDescription stroke =
                 new GestureDescription.StrokeDescription(path, 0, 90);
         GestureDescription gesture = new GestureDescription.Builder().addStroke(stroke).build();
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean(false);
         boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
-            @Override public void onCompleted(GestureDescription gestureDescription) {
-                log("Tap completed at " + x + ", " + y);
+            @Override public void onCompleted(GestureDescription description) {
+                completed.set(true);
+                done.countDown();
             }
-            @Override public void onCancelled(GestureDescription gestureDescription) {
-                log("Tap cancelled at " + x + ", " + y);
+            @Override public void onCancelled(GestureDescription description) {
+                done.countDown();
             }
         }, main);
-        if (!accepted) log("Tap rejected at " + x + ", " + y);
+        if (!accepted) throw new IllegalStateException("Tap rejected at " + x + ", " + y);
+        done.await();
+        if (!completed.get()) throw new IllegalStateException("Tap cancelled at " + x + ", " + y);
     }
 
     private void log(String message) {
