@@ -20,6 +20,9 @@ final class MacroInterpreter {
     private final Map<String, Integer> labels = new HashMap<>();
     private final Map<Integer, Integer> falseTarget = new HashMap<>();
     private final Map<Integer, Integer> skipTarget = new HashMap<>();
+    private final Map<Integer, Integer> branchParent = new HashMap<>();
+    private final Map<Integer, Integer> blockEnd = new HashMap<>();
+    private final Set<Integer> activeBlocks = new HashSet<>();
     private final List<String> lines = new ArrayList<>();
     private final List<int[]> strokePoints = new ArrayList<>();
     private long strokeDuration = 1;
@@ -100,7 +103,7 @@ final class MacroInterpreter {
     }
 
     private void compile(String source) {
-        lines.clear(); labels.clear(); falseTarget.clear(); skipTarget.clear();
+        lines.clear(); labels.clear(); falseTarget.clear(); skipTarget.clear(); branchParent.clear(); blockEnd.clear(); activeBlocks.clear();
         Deque<IfBlock> stack = new ArrayDeque<>();
         String[] sourceLines = source.split("\\r?\\n");
         for (String raw : sourceLines) {
@@ -137,7 +140,7 @@ final class MacroInterpreter {
                 falseTarget.put(b.lastBranch, i + 1);
                 for (int branch : b.branches) skipTarget.put(branch, i + 1);
                 skipTarget.put(b.first, i + 1);
-                skipTarget.put(i - 1, i + 1);
+                
             }
         }
         if (!stack.isEmpty()) throw new IllegalArgumentException("Missing endif for if at line " + (stack.peek().first + 1));
