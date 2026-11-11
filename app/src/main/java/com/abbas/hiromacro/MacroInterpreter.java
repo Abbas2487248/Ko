@@ -39,12 +39,22 @@ final class MacroInterpreter {
             if (line.isEmpty()) { pc++; continue; }
             String lower = line.toLowerCase(Locale.ROOT);
             if (lower.startsWith("if ")) {
-                pc = truth(expression(line.substring(3))) ? pc + 1 : falseTarget.getOrDefault(pc, pc + 1);
+                activeBlocks.remove(pc);
+                if (truth(expression(line.substring(3)))) { activeBlocks.add(pc); pc++; }
+                else pc = falseTarget.getOrDefault(pc, pc + 1);
             } else if (lower.startsWith("elseif ")) {
-                pc = truth(expression(line.substring(7))) ? pc + 1 : falseTarget.getOrDefault(pc, pc + 1);
+                int parent = branchParent.getOrDefault(pc, -1);
+                if (activeBlocks.contains(parent)) pc = blockEnd.getOrDefault(parent, pc + 1);
+                else if (truth(expression(line.substring(7)))) { activeBlocks.add(parent); pc++; }
+                else pc = falseTarget.getOrDefault(pc, pc + 1);
             } else if (lower.equals("else")) {
-                pc++;
+                int parent = branchParent.getOrDefault(pc, -1);
+                if (activeBlocks.contains(parent)) pc = blockEnd.getOrDefault(parent, pc + 1);
+                else pc++;
             } else if (lower.equals("endif")) {
+                for (Map.Entry<Integer, Integer> e : blockEnd.entrySet()) {
+                    if (e.getValue() == pc + 1) activeBlocks.remove(e.getKey());
+                }
                 pc++;
             } else if (lower.startsWith("goto ")) {
                 String label = line.substring(5).trim();
@@ -126,17 +136,20 @@ final class MacroInterpreter {
                 if (stack.isEmpty()) throw new IllegalArgumentException("elseif without if at line " + (i + 1));
                 IfBlock b = stack.peek();
                 b.branches.add(i);
+                branchParent.put(i, b.first);
                 falseTarget.put(b.lastBranch, i);
                 b.lastBranch = i;
             } else if (l.equals("else")) {
                 if (stack.isEmpty()) throw new IllegalArgumentException("else without if at line " + (i + 1));
                 IfBlock b = stack.peek();
+                branchParent.put(i, b.first);
                 falseTarget.put(b.lastBranch, i);
                 b.lastBranch = i;
                 b.hasElse = true;
             } else if (l.equals("endif")) {
                 if (stack.isEmpty()) throw new IllegalArgumentException("endif without if at line " + (i + 1));
                 IfBlock b = stack.pop();
+                blockEnd.put(b.first, i + 1);
                 falseTarget.put(b.lastBranch, i + 1);
                 for (int branch : b.branches) skipTarget.put(branch, i + 1);
                 skipTarget.put(b.first, i + 1);
