@@ -107,40 +107,46 @@ public class MacroAccessibilityService extends AccessibilityService {
     }
 
     private void runLines(String source) {
-        String[] lines = source.split("\\r?\\n");
-        for (int index = 0; index < lines.length && running && !Thread.currentThread().isInterrupted(); index++) {
-            String line = lines[index].trim();
-            if (line.isEmpty() || line.startsWith(";") || line.startsWith("//")
-                    || line.startsWith(":") || line.startsWith("DEVICE:")
-                    || line.startsWith("SCREEN_SIZE:") || line.equalsIgnoreCase(":end")) continue;
-            try {
-                String[] parts = line.split("\\s+");
-                String command = parts[0].toLowerCase();
-                if ("sleep".equals(command) && parts.length >= 2) {
-                    Thread.sleep(Math.max(0L, Long.parseLong(parts[1])));
-                } else if ("touchpress".equals(command) && parts.length >= 3) {
-                    int x = Integer.parseInt(parts[1]);
-                    int y = Integer.parseInt(parts[2]);
-                    tap(x, y);
-                    Thread.sleep(140L);
-                } else if ("log".equals(command)) {
-                    log(line.length() > 4 ? line.substring(4) : "");
-                } else if ("toast".equals(command)) {
-                    log("TOAST: " + (line.length() > 5 ? line.substring(5) : ""));
-                } else if (command.startsWith("#") || command.equals("var") || command.equals("set")) {
-                    log("Line " + (index + 1) + ": variables are not implemented yet.");
-                } else {
-                    log("Line " + (index + 1) + ": unsupported command: " + parts[0]);
+        try {
+            MacroInterpreter interpreter = new MacroInterpreter(new MacroInterpreter.Host() {
+                @Override public boolean isRunning() { return running && !Thread.currentThread().isInterrupted(); }
+                @Override public void sleep(long millis) throws InterruptedException { Thread.sleep(millis); }
+                @Override public void log(String message) { MacroAccessibilityService.this.log(message); }
+                @Override public void tap(int x, int y) { MacroAccessibilityService.this.tap(x, y); }
+                @Override public void touchPath(java.util.List<int[]> points, long durationMs) throws Exception {
+                    if (points == null || points.isEmpty()) return;
+                    Path path = new Path();
+                    path.moveTo(points.get(0)[0], points.get(0)[1]);
+                    for (int i = 1; i < points.size(); i++) path.lineTo(points.get(i)[0], points.get(i)[1]);
+                    long duration = Math.max(1L, Math.min(60000L, durationMs));
+                    GestureDescription.StrokeDescription stroke =
+                            new GestureDescription.StrokeDescription(path, 0, duration);
+                    GestureDescription gesture = new GestureDescription.Builder().addStroke(stroke).build();
+                    java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+                    java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean(false);
+                    boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
+                        @Override public void onCompleted(GestureDescription description) {
+                            completed.set(true);
+                            done.countDown();
+                        }
+                        @Override public void onCancelled(GestureDescription description) {
+                            done.countDown();
+                        }
+                    }, main);
+                    if (!accepted) throw new IllegalStateException("Swipe gesture rejected by Android.");
+                    done.await();
+                    if (!completed.get()) throw new IllegalStateException("Swipe gesture was cancelled.");
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Exception e) {
-                log("Line " + (index + 1) + " error: " + e.getMessage());
-            }
+            });
+            interpreter.run(source);
+            if (running) log("Script finished.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log("Script stopped safely: " + e.getMessage());
+        } finally {
+            running = false;
         }
-        if (running) log("Script finished.");
-        running = false;
     }
 
     private void tap(int x, int y) {
