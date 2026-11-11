@@ -112,7 +112,7 @@ public class MacroAccessibilityService extends AccessibilityService {
                 @Override public boolean isRunning() { return running && !Thread.currentThread().isInterrupted(); }
                 @Override public void sleep(long millis) throws InterruptedException { Thread.sleep(millis); }
                 @Override public void log(String message) { MacroAccessibilityService.this.log(message); }
-                @Override public void tap(int x, int y) { MacroAccessibilityService.this.tap(x, y); }
+                @Override public void tap(int x, int y) throws Exception { MacroAccessibilityService.this.tap(x, y); }
                 @Override public void touchPath(java.util.List<int[]> points, long durationMs) throws Exception {
                     if (points == null || points.isEmpty()) return;
                     Path path = new Path();
