@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">HiroMacro</string>
+    <string name="accessibility_description">Allows HiroMacro to perform touch gestures for your selected macro script.</string>
+</resources>
