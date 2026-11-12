@@ -3,6 +3,11 @@ package com.abbas.hiromacro;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
+import android.graphics.Bitmap;
+import android.graphics.ColorSpace;
+import android.hardware.HardwareBuffer;
+import android.os.Build;
+import android.view.Display;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -14,6 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 public class MacroAccessibilityService extends AccessibilityService {
@@ -113,6 +121,7 @@ public class MacroAccessibilityService extends AccessibilityService {
                 @Override public void sleep(long millis) throws InterruptedException { Thread.sleep(millis); }
                 @Override public void log(String message) { MacroAccessibilityService.this.log(message); }
                 @Override public void tap(int x, int y) throws Exception { MacroAccessibilityService.this.tap(x, y); }
+                @Override public int getColor(int x, int y) throws Exception { return MacroAccessibilityService.this.readPixelColor(x, y); }
                 @Override public void touchPath(java.util.List<int[]> points, long durationMs) throws Exception {
                     if (points == null || points.isEmpty()) return;
                     Path path = new Path();
@@ -146,6 +155,58 @@ public class MacroAccessibilityService extends AccessibilityService {
             log("Script stopped safely: " + e.getMessage());
         } finally {
             running = false;
+        }
+    }
+
+
+    /** Reads one pixel from the active display using the Accessibility screenshot API (Android 11+). */
+    private int readPixelColor(int x, int y) throws Exception {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            throw new UnsupportedOperationException("Screen color reading requires Android 11 or newer.");
+        }
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<Bitmap> captured = new AtomicReference<>();
+        AtomicReference<String> failure = new AtomicReference<>();
+        main.post(() -> {
+            try {
+                takeScreenshot(Display.DEFAULT_DISPLAY, command -> main.post(command), new TakeScreenshotCallback() {
+                    @Override public void onSuccess(ScreenshotResult result) {
+                        HardwareBuffer buffer = result.getHardwareBuffer();
+                        try {
+                            Bitmap hardware = Bitmap.wrapHardwareBuffer(buffer, result.getColorSpace());
+                            if (hardware == null) {
+                                failure.set("Android returned an empty screenshot.");
+                            } else {
+                                captured.set(hardware.copy(Bitmap.Config.ARGB_8888, false));
+                            }
+                        } catch (Exception e) {
+                            failure.set("Could not decode screenshot: " + e.getMessage());
+                        } finally {
+                            if (buffer != null) buffer.close();
+                            done.countDown();
+                        }
+                    }
+                    @Override public void onFailure(int errorCode) {
+                        failure.set("Screenshot failed (Android error " + errorCode + ").");
+                        done.countDown();
+                    }
+                });
+            } catch (Exception e) {
+                failure.set("Screenshot request failed: " + e.getMessage());
+                done.countDown();
+            }
+        });
+        if (!done.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Timed out waiting for screen screenshot.");
+        Bitmap bitmap = captured.get();
+        if (bitmap == null) throw new IllegalStateException(failure.get() == null ? "Screen screenshot unavailable." : failure.get());
+        try {
+            if (x < 0 || y < 0 || x >= bitmap.getWidth() || y >= bitmap.getHeight()) {
+                throw new IllegalArgumentException("Color coordinate outside screenshot: " + x + "," + y
+                        + " (screenshot " + bitmap.getWidth() + "x" + bitmap.getHeight() + ").");
+            }
+            return bitmap.getPixel(x, y);
+        } finally {
+            bitmap.recycle();
         }
     }
 
