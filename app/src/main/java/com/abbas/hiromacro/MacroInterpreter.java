@@ -128,7 +128,9 @@ final class MacroInterpreter {
                 throw new IllegalArgumentException("Unsupported or malformed command at line " + sourceLine(pc) + ": " + line);
             }
         }
-        flushStroke();
+        // Never dispatch a buffered touch after the user has stopped the macro.
+        if (host.isRunning()) flushStroke();
+        else strokePoints.clear();
     }
 
     /**
