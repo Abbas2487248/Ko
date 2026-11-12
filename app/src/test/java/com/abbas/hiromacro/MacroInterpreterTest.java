@@ -8,11 +8,14 @@ import static org.junit.Assert.*;
 public class MacroInterpreterTest {
     private static final class FakeHost implements MacroInterpreter.Host {
         final List<String> messages = new ArrayList<>();
-        @Override public boolean isRunning() { return true; }
-        @Override public void sleep(long millis) { }
+        boolean running = true;
+        boolean stopOnSleep;
+        int taps;
+        @Override public boolean isRunning() { return running; }
+        @Override public void sleep(long millis) { if (stopOnSleep) running = false; }
         @Override public void log(String message) { messages.add(message); }
         @Override public void touchPath(List<int[]> points, long durationMs) { }
-        @Override public void tap(int x, int y) { }
+        @Override public void tap(int x, int y) { taps++; }
         @Override public int getColor(int x, int y) { return 0; }
     }
 
@@ -36,6 +39,13 @@ public class MacroInterpreterTest {
     @Test public void structureCheckRejectsDuplicateLabels() {
         String result = MacroInterpreter.validateStructure(":same\n:same\n");
         assertTrue(result, result.startsWith("Structure check failed: Duplicate label"));
+    }
+
+    @Test public void stopDiscardsBufferedTouch() throws Exception {
+        FakeHost host = new FakeHost();
+        host.stopOnSleep = true;
+        new MacroInterpreter(host).run("touchDown 0 50 50\\nsleep 10\\n");
+        assertEquals("No touch should be sent after STOP.", 0, host.taps);
     }
 
     @Test public void expressionRejectsUnexpectedCharacters() throws Exception {
