@@ -238,6 +238,63 @@ final class MacroInterpreter {
         }
     }
 
+    /** Checks command names and argument counts without executing any game actions. */
+    static String validateCommands(String source) {
+        String structure = validateStructure(source);
+        if (structure.startsWith("Structure check failed:")) return structure;
+        String[] sourceLines = source.split("\\r?\\n");
+        for (int i = 0; i < sourceLines.length; i++) {
+            String s = sourceLines[i].trim();
+            if (s.isEmpty() || s.startsWith("//") || s.startsWith(";") || s.startsWith(":")) continue;
+            int comment = s.indexOf("//");
+            if (comment >= 0) s = s.substring(0, comment).trim();
+            s = s.replaceFirst("\\s+لا\\s+تغير\\s*$", "").trim();
+            if (s.isEmpty()) continue;
+            String lower = s.toLowerCase(Locale.ROOT);
+            String[] a;
+            if (lower.startsWith("if ") || lower.startsWith("elseif ")) continue;
+            if (lower.equals("else") || lower.equals("endif")) continue;
+            if (lower.startsWith("goto ")) continue; // label target checked by compile()
+            if (lower.startsWith("sleep ")) continue;
+            if (lower.startsWith("touchdown ")) {
+                a = args(s.substring(10));
+                if (a.length != 3) return "Command check failed: touchDown needs id x y at line " + (i + 1);
+                continue;
+            }
+            if (lower.startsWith("touchmove ")) {
+                a = args(s.substring(10));
+                if (a.length != 3) return "Command check failed: touchMove needs id x y at line " + (i + 1);
+                continue;
+            }
+            if (lower.equals("touchup") || lower.startsWith("touchup ")) {
+                a = lower.equals("touchup") ? new String[0] : args(s.substring(7));
+                if (a.length > 1) return "Command check failed: touchUp accepts zero or one id at line " + (i + 1);
+                continue;
+            }
+            if (lower.startsWith("touchpress ")) {
+                a = args(s.substring(11));
+                if (a.length != 2) return "Command check failed: touchPress needs x y at line " + (i + 1);
+                continue;
+            }
+            if (lower.startsWith("getcolor ") || lower.startsWith("getpixel ")) {
+                a = args(s.substring(s.indexOf(' ') + 1));
+                if (a.length != 3 || !a[0].startsWith("#")) return "Command check failed: getColor/getPixel needs #variable x y at line " + (i + 1);
+                continue;
+            }
+            if (lower.startsWith("getrgb ")) {
+                a = args(s.substring(7));
+                if (a.length != 5 || !a[0].startsWith("#") || !a[1].startsWith("#") || !a[2].startsWith("#"))
+                    return "Command check failed: getRGB needs #red #green #blue x y at line " + (i + 1);
+                continue;
+            }
+            if (lower.startsWith("toast ") || lower.startsWith("log ")) continue;
+            if (lower.startsWith("device:") || lower.startsWith("screen_size:")) continue;
+            if (s.startsWith("#") && s.contains("=")) continue;
+            return "Command check failed: unsupported or malformed command at line " + (i + 1) + ": " + s;
+        }
+        return "Command check passed. Supported command names and argument counts look valid; variables, coordinates, and in-game behavior are not verified.";
+    }
+
     private int sourceLine(int programCounter) {
         if (programCounter < 0 || programCounter >= originalLineNumbers.size()) return programCounter + 1;
         return originalLineNumbers.get(programCounter);
