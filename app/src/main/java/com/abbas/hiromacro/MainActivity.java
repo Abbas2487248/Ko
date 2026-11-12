@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                         getContentResolver().openInputStream(uri), StandardCharsets.UTF_8))) {
                     String line;
-                    while ((line = reader.readLine()) != null) out.append(line).append('\\n');
+                    while ((line = reader.readLine()) != null) out.append(line).append('\n');
                 }
                 String loaded = out.toString();
                 runOnUiThread(() -> {
