@@ -46,13 +46,13 @@ public class MainActivity extends Activity {
         root.addView(choose);
 
         Button check = new Button(this);
-        check.setText("CHECK SCRIPT (structure only)");
+        check.setText("CHECK SCRIPT (structure + commands)");
         check.setOnClickListener(v -> {
             if (scriptText.isEmpty()) {
                 note("Choose a script first.");
                 return;
             }
-            note(MacroInterpreter.validateStructure(scriptText));
+            note(MacroInterpreter.validateCommands(scriptText));
         });
         root.addView(check);
 
