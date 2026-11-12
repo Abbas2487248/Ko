@@ -178,6 +178,55 @@ public class MacroAccessibilityService extends AccessibilityService {
     }
 
 
+
+    /** Logs display and screenshot dimensions without sending any touch gesture. */
+    public void logDisplayDiagnostics() {
+        android.util.DisplayMetrics appMetrics = getResources().getDisplayMetrics();
+        android.util.DisplayMetrics realMetrics = new android.util.DisplayMetrics();
+        android.view.WindowManager windowManager =
+                (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        if (windowManager != null) {
+            windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
+        }
+        log("DISPLAY CHECK: app metrics=" + appMetrics.widthPixels + "x" + appMetrics.heightPixels
+                + ", real display=" + realMetrics.widthPixels + "x" + realMetrics.heightPixels
+                + ". No touch was sent.");
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            log("SCREENSHOT CHECK unavailable: Android 11 or newer is required.");
+            return;
+        }
+        main.post(() -> {
+            try {
+                takeScreenshot(Display.DEFAULT_DISPLAY, command -> main.post(command),
+                        new TakeScreenshotCallback() {
+                    @Override public void onSuccess(ScreenshotResult result) {
+                        HardwareBuffer buffer = result.getHardwareBuffer();
+                        Bitmap bitmap = null;
+                        try {
+                            bitmap = Bitmap.wrapHardwareBuffer(buffer, result.getColorSpace());
+                            if (bitmap == null) {
+                                log("SCREENSHOT CHECK failed: Android returned an empty image.");
+                            } else {
+                                log("SCREENSHOT CHECK: " + bitmap.getWidth() + "x" + bitmap.getHeight()
+                                        + ". No touch was sent.");
+                            }
+                        } catch (Exception e) {
+                            log("SCREENSHOT CHECK failed: " + e.getMessage());
+                        } finally {
+                            if (bitmap != null) bitmap.recycle();
+                            if (buffer != null) buffer.close();
+                        }
+                    }
+                    @Override public void onFailure(int errorCode) {
+                        log("SCREENSHOT CHECK failed (Android error " + errorCode + ").");
+                    }
+                });
+            } catch (Exception e) {
+                log("SCREENSHOT CHECK failed: " + e.getMessage());
+            }
+        });
+    }
+
     /** Reads one pixel from the active display using the Accessibility screenshot API (Android 11+). */
     private int readPixelColor(int x, int y) throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
