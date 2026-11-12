@@ -60,8 +60,10 @@ final class MacroInterpreter {
                 pc++;
             } else if (lower.startsWith("goto ")) {
                 String label = line.substring(5).trim();
+                if (label.startsWith(":")) label = label.substring(1).trim();
                 Integer target = labels.get(label.toLowerCase(Locale.ROOT));
                 if (target == null) throw new IllegalArgumentException("Unknown label " + label + " at line " + sourceLine(pc));
+                activeBlocks.clear();
                 pc = target;
             } else if (lower.startsWith("sleep ")) {
                 long ms = Math.max(0L, Math.min(60000L, Math.round(expression(line.substring(6)))));
@@ -168,6 +170,8 @@ final class MacroInterpreter {
             if (s.isEmpty()) continue;
             if (s.startsWith(":")) {
                 String label = s.substring(1).trim().toLowerCase(Locale.ROOT);
+                if (label.isEmpty()) throw new IllegalArgumentException("Empty label at line " + (sourceIndex + 1));
+                if (labels.containsKey(label)) throw new IllegalArgumentException("Duplicate label :" + label + " at line " + (sourceIndex + 1));
                 labels.put(label, lines.size());
                 continue;
             }
@@ -180,6 +184,7 @@ final class MacroInterpreter {
             } else if (l.startsWith("elseif ")) {
                 if (stack.isEmpty()) throw new IllegalArgumentException("elseif without if at line " + originalLineNumbers.get(i));
                 IfBlock b = stack.peek();
+                if (b.hasElse) throw new IllegalArgumentException("elseif after else at line " + originalLineNumbers.get(i));
                 b.branches.add(i);
                 branchParent.put(i, b.first);
                 falseTarget.put(b.lastBranch, i);
@@ -187,6 +192,7 @@ final class MacroInterpreter {
             } else if (l.equals("else")) {
                 if (stack.isEmpty()) throw new IllegalArgumentException("else without if at line " + originalLineNumbers.get(i));
                 IfBlock b = stack.peek();
+                if (b.hasElse) throw new IllegalArgumentException("Duplicate else at line " + originalLineNumbers.get(i));
                 branchParent.put(i, b.first);
                 falseTarget.put(b.lastBranch, i);
                 b.lastBranch = i;
@@ -202,6 +208,17 @@ final class MacroInterpreter {
             }
         }
         if (!stack.isEmpty()) throw new IllegalArgumentException("Missing endif for if at line " + originalLineNumbers.get(stack.peek().first));
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i).trim();
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("goto ")) {
+                String target = line.substring(5).trim();
+                if (target.startsWith(":")) target = target.substring(1).trim();
+                if (!labels.containsKey(target.toLowerCase(Locale.ROOT))) {
+                    throw new IllegalArgumentException("Unknown label " + target + " at line " + originalLineNumbers.get(i));
+                }
+            }
+        }
         // Each conditional branch jumps past the rest of its chain when it evaluates true.
         for (int i = 0; i < lines.size(); i++) {
             String l = lines.get(i).toLowerCase(Locale.ROOT);
@@ -256,7 +273,17 @@ final class MacroInterpreter {
     private double expression(String input) {
         Matcher m = TOKEN.matcher(input);
         List<String> t = new ArrayList<>();
-        while (m.find()) t.add(m.group());
+        int offset = 0;
+        while (offset < input.length()) {
+            while (offset < input.length() && Character.isWhitespace(input.charAt(offset))) offset++;
+            if (offset >= input.length()) break;
+            m.region(offset, input.length());
+            if (!m.lookingAt()) {
+                throw new IllegalArgumentException("Invalid character in expression: " + input.substring(offset));
+            }
+            t.add(m.group());
+            offset = m.end();
+        }
         Expr p = new Expr(t);
         double value = p.compare();
         if (p.hasNext()) throw new IllegalArgumentException("Invalid expression: " + input);
