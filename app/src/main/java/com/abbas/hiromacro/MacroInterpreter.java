@@ -117,11 +117,15 @@ final class MacroInterpreter {
         lines.clear(); originalLineNumbers.clear(); labels.clear(); falseTarget.clear(); skipTarget.clear(); branchParent.clear(); blockEnd.clear(); activeBlocks.clear();
         Deque<IfBlock> stack = new ArrayDeque<>();
         String[] sourceLines = source.split("\\r?\\n");
-        for (String raw : sourceLines) {
+        for (int sourceIndex = 0; sourceIndex < sourceLines.length; sourceIndex++) {
+            String raw = sourceLines[sourceIndex];
             String s = raw.trim();
             if (s.isEmpty() || s.startsWith("//") || s.startsWith(";")) continue;
             int comment = s.indexOf("//");
             if (comment >= 0) s = s.substring(0, comment).trim();
+            if (s.isEmpty()) continue;
+            // Strip the inline Arabic note used after configuration values.
+            s = s.replaceFirst("\\s+لا\\s+تغير\\s*$", "").trim();
             if (s.isEmpty()) continue;
             if (s.startsWith(":")) {
                 String label = s.substring(1).trim().toLowerCase(Locale.ROOT);
@@ -129,6 +133,7 @@ final class MacroInterpreter {
                 continue;
             }
             lines.add(s);
+            originalLineNumbers.add(sourceIndex + 1);
             int i = lines.size() - 1;
             String l = s.toLowerCase(Locale.ROOT);
             if (l.startsWith("if ")) {
@@ -175,7 +180,10 @@ final class MacroInterpreter {
         }
     }
 
-    private int sourceLine(int programCounter) {\n        if (programCounter < 0 || programCounter >= originalLineNumbers.size()) return programCounter + 1;\n        return originalLineNumbers.get(programCounter);\n    }\n\n    private static final class IfBlock {
+    private int sourceLine(int programCounter) {
+        if (programCounter < 0 || programCounter >= originalLineNumbers.size()) return programCounter + 1;
+        return originalLineNumbers.get(programCounter);
+    }\n\n    private static final class IfBlock {
         final int first;
         int lastBranch;
         boolean hasElse;
