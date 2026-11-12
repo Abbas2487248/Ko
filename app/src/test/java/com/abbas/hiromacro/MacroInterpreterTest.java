@@ -44,7 +44,7 @@ public class MacroInterpreterTest {
     @Test public void stopDiscardsBufferedTouch() throws Exception {
         FakeHost host = new FakeHost();
         host.stopOnSleep = true;
-        new MacroInterpreter(host).run("touchDown 0 50 50\\nsleep 10\\n");
+        new MacroInterpreter(host).run("touchDown 0 50 50\nsleep 10\n");
         assertEquals("No touch should be sent after STOP.", 0, host.taps);
     }
 
