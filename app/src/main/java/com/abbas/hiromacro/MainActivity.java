@@ -100,6 +100,39 @@ public class MainActivity extends Activity {
         MacroAccessibilityService.setLogListener(this::note);
         setContentView(root);
         note("Ready. Select a script, enable Accessibility, then use Volume + to start and Volume - to stop.");
+        loadSavedScript();
+    }
+
+    /** Restore the previously selected document after the app process is recreated. */
+    private void loadSavedScript() {
+        String savedUri = getSharedPreferences("hiromacro", MODE_PRIVATE)
+                .getString("selected_script_uri", null);
+        if (savedUri == null || savedUri.isEmpty()) return;
+        Thread loader = new Thread(() -> {
+            try {
+                Uri uri = Uri.parse(savedUri);
+                StringBuilder out = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        getContentResolver().openInputStream(uri), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) out.append(line).append('\\n');
+                }
+                String loaded = out.toString();
+                runOnUiThread(() -> {
+                    scriptUri = uri;
+                    scriptText = loaded;
+                    selected.setText("Restored: " + uri.getLastPathSegment());
+                    note("Saved script restored (" + scriptText.split("\\\\n").length + " lines).");
+                    note(MacroInterpreter.validateStructure(scriptText));
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    selected.setText("Saved script permission unavailable — choose it again");
+                    note("Could not restore saved script: " + e.getMessage());
+                });
+            }
+        }, "HiroMacro-RestoreScript");
+        loader.start();
     }
 
     private void chooseScript() {
