@@ -273,7 +273,10 @@ final class MacroInterpreter {
             if (v.isEmpty()) throw new IllegalArgumentException("Missing expression value");
             p++;
             if (v.startsWith("#")) {
-                Double n = vars.get(v.substring(1).toLowerCase(Locale.ROOT));
+                String variable = v.substring(1).toLowerCase(Locale.ROOT);
+                Double n = vars.get(variable);
+                // Pixel channels are unavailable without screenshot color sampling; treat them as zero for now.
+                if (n == null && (variable.equals("red") || variable.equals("green") || variable.equals("blue"))) return 0.0;
                 if (n == null) throw new IllegalArgumentException("Variable " + v + " is not set");
                 return n;
             }
