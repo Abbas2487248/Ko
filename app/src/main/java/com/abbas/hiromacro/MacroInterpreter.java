@@ -12,6 +12,7 @@ final class MacroInterpreter {
         void log(String message);
         void touchPath(List<int[]> points, long durationMs) throws Exception;
         void tap(int x, int y) throws Exception;
+        int getColor(int x, int y) throws Exception;
     }
 
     private static final Pattern TOKEN = Pattern.compile("#[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)|==|!=|<=|>=|[()+*/%<>-]");
@@ -90,6 +91,21 @@ final class MacroInterpreter {
                 flushStroke();
                 host.tap(integer(a[0]), integer(a[1]));
                 pc++;
+            } else if (lower.startsWith("getcolor ") || lower.startsWith("getpixel ")) {
+                String[] a = args(line.substring(line.indexOf(' ') + 1));
+                if (a.length != 3 || !a[0].startsWith("#")) throw new IllegalArgumentException("getColor needs: #variable x y (line " + sourceLine(pc) + ")");
+                flushStroke();
+                vars.put(a[0].substring(1).toLowerCase(Locale.ROOT), (double) host.getColor(integer(a[1]), integer(a[2])));
+                pc++;
+            } else if (lower.startsWith("getrgb ")) {
+                String[] a = args(line.substring(7));
+                if (a.length != 5 || !a[0].startsWith("#") || !a[1].startsWith("#") || !a[2].startsWith("#")) throw new IllegalArgumentException("getRGB needs: #red #green #blue x y (line " + sourceLine(pc) + ")");
+                flushStroke();
+                int color = host.getColor(integer(a[3]), integer(a[4]));
+                vars.put(a[0].substring(1).toLowerCase(Locale.ROOT), (double) ((color >> 16) & 0xff));
+                vars.put(a[1].substring(1).toLowerCase(Locale.ROOT), (double) ((color >> 8) & 0xff));
+                vars.put(a[2].substring(1).toLowerCase(Locale.ROOT), (double) (color & 0xff));
+                pc++;
             } else if (lower.startsWith("toast ")) {
                 host.log("TOAST: " + interpolate(line.substring(6)));
                 pc++;
@@ -124,6 +140,7 @@ final class MacroInterpreter {
             public void log(String message) {}
             public void touchPath(List<int[]> points, long durationMs) {}
             public void tap(int x, int y) {}
+            public int getColor(int x, int y) { return 0; }
         });
         try {
             checker.compile(source);
