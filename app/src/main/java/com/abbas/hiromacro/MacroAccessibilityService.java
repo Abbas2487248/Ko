@@ -139,7 +139,11 @@ public class MacroAccessibilityService extends AccessibilityService {
                     if (points == null || points.isEmpty()) return;
                     Path path = new Path();
                     path.moveTo(points.get(0)[0], points.get(0)[1]);
-                    for (int i = 1; i < points.size(); i++) path.lineTo(points.get(i)[0], points.get(i)[1]);
+                    for (int i = 0; i < points.size(); i++) {
+                        int[] point = points.get(i);
+                        MacroAccessibilityService.this.validateTouchPoint(point[0], point[1]);
+                        if (i > 0) path.lineTo(point[0], point[1]);
+                    }
                     long duration = Math.max(1L, Math.min(60000L, durationMs));
                     GestureDescription.StrokeDescription stroke =
                             new GestureDescription.StrokeDescription(path, 0, duration);
@@ -225,7 +229,19 @@ public class MacroAccessibilityService extends AccessibilityService {
         }
     }
 
+    /** Reject coordinates outside the active display instead of allowing an accidental edge tap. */
+    private void validateTouchPoint(int x, int y) {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int width = metrics.widthPixels;
+        int height = metrics.heightPixels;
+        if (x < 0 || y < 0 || x >= width || y >= height) {
+            throw new IllegalArgumentException("Touch coordinate " + x + ", " + y
+                    + " is outside active display " + width + "x" + height + ". No touch sent.");
+        }
+    }
+
     private void tap(int x, int y) throws InterruptedException {
+        validateTouchPoint(x, y);
         Path path = new Path();
         path.moveTo(x, y);
         GestureDescription.StrokeDescription stroke =
