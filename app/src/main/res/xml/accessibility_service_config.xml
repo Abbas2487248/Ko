@@ -4,6 +4,7 @@
     android:notificationTimeout="50"
     android:accessibilityFlags="flagRequestFilterKeyEvents"
     android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
     android:canRetrieveWindowContent="false"
     android:canRequestFilterKeyEvents="true"
     android:description="@string/accessibility_description" />
