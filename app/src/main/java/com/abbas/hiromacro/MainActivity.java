@@ -58,6 +58,8 @@ public class MainActivity extends Activity {
 
         Button dimensions = new Button(this);
         dimensions.setText("CHECK SCREEN DIMENSIONS (SAFE)");
+        dimensions.setAllCaps(false);
+        dimensions.setMinHeight((int) (56 * getResources().getDisplayMetrics().density));
         dimensions.setOnClickListener(v -> {
             MacroAccessibilityService service = MacroAccessibilityService.getInstance();
             if (service == null) {
