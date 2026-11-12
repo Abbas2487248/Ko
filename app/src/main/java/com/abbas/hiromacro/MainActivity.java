@@ -29,27 +29,27 @@ public class MainActivity extends Activity {
         root.setGravity(Gravity.TOP);
 
         TextView title = new TextView(this);
-        title.setText("HiroMacro");
+        title.setText("هيرو ماكرو");
         title.setTextSize(26);
         root.addView(title);
 
         selected = new TextView(this);
         String savedUri = getSharedPreferences("hiromacro", MODE_PRIVATE)
                 .getString("selected_script_uri", null);
-        selected.setText(savedUri == null ? "No script selected" : "A saved script is ready for volume-button start");
+        selected.setText(savedUri == null ? "لم يتم اختيار ملف سكربت" : "تم استعادة السكربت المحفوظ وجاهز للتشغيل");
         selected.setPadding(0, 18, 0, 18);
         root.addView(selected);
 
         Button choose = new Button(this);
-        choose.setText("Choose script");
+        choose.setText("اختيار ملف السكربت");
         choose.setOnClickListener(v -> chooseScript());
         root.addView(choose);
 
         Button check = new Button(this);
-        check.setText("CHECK SCRIPT (structure + commands)");
+        check.setText("فحص السكربت (البنية والأوامر)");
         check.setOnClickListener(v -> {
             if (scriptText.isEmpty()) {
-                note("Choose a script first.");
+                note("اختر ملف السكربت أولاً.");
                 return;
             }
             note(MacroInterpreter.validateCommands(scriptText));
@@ -57,51 +57,51 @@ public class MainActivity extends Activity {
         root.addView(check);
 
         Button dimensions = new Button(this);
-        dimensions.setText("CHECK SCREEN DIMENSIONS (SAFE)");
+        dimensions.setText("فحص أبعاد الشاشة (آمن)");
         dimensions.setAllCaps(false);
         dimensions.setMinHeight((int) (56 * getResources().getDisplayMetrics().density));
         dimensions.setOnClickListener(v -> {
             MacroAccessibilityService service = MacroAccessibilityService.getInstance();
             if (service == null) {
-                note("Enable HiroMacro Accessibility service first, then return.");
+                note("فعّل خدمة إمكانية الوصول لهيرو ماكرو أولاً، ثم ارجع إلى التطبيق.");
                 return;
             }
-            note("Starting display check. No touch gestures will be sent.");
+            note("بدأ فحص أبعاد الشاشة. لن يتم إرسال أي لمسات.");
             service.logDisplayDiagnostics();
         });
         root.addView(dimensions);
 
         Button accessibility = new Button(this);
-        accessibility.setText("Enable Accessibility service");
+        accessibility.setText("تفعيل خدمة إمكانية الوصول");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         root.addView(accessibility);
 
         TextView keyHelp = new TextView(this);
-        keyHelp.setText("Hardware controls (when Accessibility is enabled):\nVolume + : START saved script\nVolume - : STOP script");
+        keyHelp.setText("أزرار التحكم (بعد تفعيل إمكانية الوصول):\nرفع الصوت: تشغيل السكربت المحفوظ\nخفض الصوت: إيقاف السكربت");
         keyHelp.setPadding(0, 10, 0, 10);
         root.addView(keyHelp);
 
         Button start = new Button(this);
-        start.setText("START");
+        start.setText("تشغيل");
         start.setOnClickListener(v -> {
             if (scriptText.isEmpty()) { note("Choose a script first."); return; }
             MacroAccessibilityService service = MacroAccessibilityService.getInstance();
-            if (service == null) { note("Enable HiroMacro in Android Accessibility settings, then return."); return; }
+            if (service == null) { note("فعّل هيرو ماكرو من إعدادات إمكانية الوصول في أندرويد، ثم ارجع."); return; }
             service.startScript(scriptText);
         });
         root.addView(start);
 
         Button stop = new Button(this);
-        stop.setText("STOP");
+        stop.setText("إيقاف");
         stop.setOnClickListener(v -> {
             MacroAccessibilityService service = MacroAccessibilityService.getInstance();
             if (service != null) service.stopScript();
-            else note("Service is not connected.");
+            else note("خدمة إمكانية الوصول غير متصلة.");
         });
         root.addView(stop);
 
         TextView logTitle = new TextView(this);
-        logTitle.setText("Event log");
+        logTitle.setText("سجل الأحداث");
         logTitle.setTextSize(18);
         logTitle.setPadding(0, 18, 0, 8);
         root.addView(logTitle);
@@ -114,7 +114,7 @@ public class MainActivity extends Activity {
 
         MacroAccessibilityService.setLogListener(this::note);
         setContentView(root);
-        note("Ready. Select a script, enable Accessibility, then use Volume + to start and Volume - to stop.");
+        note("جاهز. اختر السكربت وفعّل إمكانية الوصول، ثم استخدم زر رفع الصوت للتشغيل وخفض الصوت للإيقاف.");
         loadSavedScript();
     }
 
@@ -137,13 +137,13 @@ public class MainActivity extends Activity {
                     scriptUri = uri;
                     scriptText = loaded;
                     selected.setText("Restored: " + uri.getLastPathSegment());
-                    note("Saved script restored (" + scriptText.split("\\n").length + " lines).");
+                    note("تمت استعادة السكربت المحفوظ (" + scriptText.split("\\n").length + " سطر).");
                     note(MacroInterpreter.validateCommands(scriptText));
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    selected.setText("Saved script permission unavailable — choose it again");
-                    note("Could not restore saved script: " + e.getMessage());
+                    selected.setText("صلاحية ملف السكربت غير متاحة — اختر الملف من جديد");
+                    note("تعذرت استعادة السكربت المحفوظ: " + e.getMessage());
                 });
             }
         }, "HiroMacro-RestoreScript");
@@ -167,7 +167,7 @@ public class MainActivity extends Activity {
             try {
                 getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } catch (SecurityException ignored) {
-                note("Provider did not grant a persistent read permission; reselect the script if needed after restart.");
+                note("لم يمنح مزود الملفات صلاحية قراءة دائمة؛ قد تحتاج إلى اختيار السكربت مجدداً بعد إعادة تشغيل التطبيق.");
             }
             StringBuilder out = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
@@ -180,9 +180,9 @@ public class MainActivity extends Activity {
             getSharedPreferences("hiromacro", MODE_PRIVATE).edit()
                     .putString("selected_script_uri", uri.toString()).apply();
             selected.setText("Selected: " + uri.getLastPathSegment() + " (saved)");
-            note("Script loaded and saved (" + scriptText.split("\\n").length + " lines).");
+            note("تم تحميل السكربت وحفظه (" + scriptText.split("\\n").length + " سطر).");
         } catch (Exception e) {
-            note("Could not read script: " + e.getMessage());
+            note("تعذرت قراءة السكربت: " + e.getMessage());
         }
     }
 
