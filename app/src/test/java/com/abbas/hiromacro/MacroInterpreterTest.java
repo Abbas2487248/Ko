@@ -49,17 +49,17 @@ public class MacroInterpreterTest {
     }
 
     @Test public void commandCheckRejectsTouchDownWithoutBothCoordinates() {
-        String result = MacroInterpreter.validateCommands("touchDown 0 #xC\\n");
+        String result = MacroInterpreter.validateCommands("touchDown 0 #xC\n");
         assertTrue(result, result.startsWith("Command check failed: touchDown needs id x y"));
     }
 
     @Test public void commandCheckAcceptsTouchUpWithOrWithoutPointerId() {
-        String result = MacroInterpreter.validateCommands("touchDown 0 10 20\\ntouchUp\\ntouchDown 0 10 20\\ntouchUp 0\\n");
+        String result = MacroInterpreter.validateCommands("touchDown 0 10 20\ntouchUp\ntouchDown 0 10 20\ntouchUp 0\n");
         assertTrue(result, result.startsWith("Command check passed."));
     }
 
     @Test public void commandCheckRejectsUnknownLegacyCommands() {
-        String result = MacroInterpreter.validateCommands("someLegacyCommand 1 2\\n");
+        String result = MacroInterpreter.validateCommands("someLegacyCommand 1 2\n");
         assertTrue(result, result.startsWith("Command check failed: unsupported or malformed command"));
     }
 
