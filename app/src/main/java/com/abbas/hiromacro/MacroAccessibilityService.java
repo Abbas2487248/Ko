@@ -30,6 +30,7 @@ public class MacroAccessibilityService extends AccessibilityService {
     private final Handler main = new Handler(Looper.getMainLooper());
     private ExecutorService executor;
     private volatile boolean running;
+    private volatile long runGeneration;
     private Future<?> task;
 
     public static MacroAccessibilityService getInstance() { return instance; }
@@ -63,6 +64,8 @@ public class MacroAccessibilityService extends AccessibilityService {
     }
 
     private void startSelectedScript() {
+        final long requestGeneration;
+        synchronized (this) { requestGeneration = ++runGeneration; }
         String savedUri = getSharedPreferences("hiromacro", MODE_PRIVATE)
                 .getString("selected_script_uri", null);
         if (savedUri == null || savedUri.isEmpty()) {
@@ -82,7 +85,13 @@ public class MacroAccessibilityService extends AccessibilityService {
                     log("Selected script is empty.");
                     return;
                 }
-                startScript(source.toString());
+                synchronized (MacroAccessibilityService.this) {
+                    if (runGeneration != requestGeneration) {
+                        log("Script start cancelled before loading completed.");
+                        return;
+                    }
+                    startScript(source.toString());
+                }
             } catch (Exception e) {
                 log("Could not load saved script: " + e.getMessage());
             }
@@ -93,14 +102,16 @@ public class MacroAccessibilityService extends AccessibilityService {
 
     public synchronized void startScript(String source) {
         stopScript();
+        final long generation = ++runGeneration;
         if (executor == null || executor.isShutdown()) executor = Executors.newSingleThreadExecutor();
         running = true;
-        task = executor.submit(() -> runLines(source));
+        task = executor.submit(() -> runLines(source, generation));
         log("Script started.");
     }
 
     public synchronized void stopScript() {
         running = false;
+        ++runGeneration;
         if (task != null) task.cancel(true);
         releaseExecutor();
         log("Stop requested.");
@@ -114,10 +125,10 @@ public class MacroAccessibilityService extends AccessibilityService {
         task = null;
     }
 
-    private void runLines(String source) {
+    private void runLines(String source, long generation) {
         try {
             MacroInterpreter interpreter = new MacroInterpreter(new MacroInterpreter.Host() {
-                @Override public boolean isRunning() { return running && !Thread.currentThread().isInterrupted(); }
+                @Override public boolean isRunning() { return running && runGeneration == generation && !Thread.currentThread().isInterrupted(); }
                 @Override public void sleep(long millis) throws InterruptedException { Thread.sleep(millis); }
                 @Override public void log(String message) { MacroAccessibilityService.this.log(message); }
                 @Override public void tap(int x, int y) throws Exception { MacroAccessibilityService.this.tap(x, y); }
@@ -143,18 +154,20 @@ public class MacroAccessibilityService extends AccessibilityService {
                         }
                     }, main);
                     if (!accepted) throw new IllegalStateException("Swipe gesture rejected by Android.");
-                    done.await();
+                    if (!done.await(15, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting for swipe gesture completion.");
+                    }
                     if (!completed.get()) throw new IllegalStateException("Swipe gesture was cancelled.");
                 }
             });
             interpreter.run(source);
-            if (running) log("Script finished.");
+            if (running && runGeneration == generation) log("Script finished.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             log("Script stopped safely: " + e.getMessage());
         } finally {
-            running = false;
+            if (runGeneration == generation) running = false;
         }
     }
 
@@ -228,7 +241,9 @@ public class MacroAccessibilityService extends AccessibilityService {
             }
         }, main);
         if (!accepted) throw new IllegalStateException("Tap rejected at " + x + ", " + y);
-        done.await();
+        if (!done.await(15, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Timed out waiting for tap completion at " + x + ", " + y);
+        }
         if (!completed.get()) throw new IllegalStateException("Tap cancelled at " + x + ", " + y);
     }
 
