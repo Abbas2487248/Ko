@@ -183,7 +183,9 @@ final class MacroInterpreter {
     private int sourceLine(int programCounter) {
         if (programCounter < 0 || programCounter >= originalLineNumbers.size()) return programCounter + 1;
         return originalLineNumbers.get(programCounter);
-    }\n\n    private static final class IfBlock {
+    }
+
+    private static final class IfBlock {
         final int first;
         int lastBranch;
         boolean hasElse;
