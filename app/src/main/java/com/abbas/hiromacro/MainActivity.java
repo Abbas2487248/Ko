@@ -45,6 +45,17 @@ public class MainActivity extends Activity {
         choose.setOnClickListener(v -> chooseScript());
         root.addView(choose);
 
+        Button check = new Button(this);
+        check.setText("CHECK SCRIPT (structure only)");
+        check.setOnClickListener(v -> {
+            if (scriptText.isEmpty()) {
+                note("Choose a script first.");
+                return;
+            }
+            note(MacroInterpreter.validateStructure(scriptText));
+        });
+        root.addView(check);
+
         Button accessibility = new Button(this);
         accessibility.setText("Enable Accessibility service");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
