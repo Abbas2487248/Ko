@@ -56,6 +56,19 @@ public class MainActivity extends Activity {
         });
         root.addView(check);
 
+        Button dimensions = new Button(this);
+        dimensions.setText("CHECK SCREEN DIMENSIONS (SAFE)");
+        dimensions.setOnClickListener(v -> {
+            MacroAccessibilityService service = MacroAccessibilityService.getInstance();
+            if (service == null) {
+                note("Enable HiroMacro Accessibility service first, then return.");
+                return;
+            }
+            note("Starting display check. No touch gestures will be sent.");
+            service.logDisplayDiagnostics();
+        });
+        root.addView(dimensions);
+
         Button accessibility = new Button(this);
         accessibility.setText("Enable Accessibility service");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
