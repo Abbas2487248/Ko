@@ -123,7 +123,7 @@ public class MainActivity extends Activity {
                     scriptText = loaded;
                     selected.setText("Restored: " + uri.getLastPathSegment());
                     note("Saved script restored (" + scriptText.split("\\n").length + " lines).");
-                    note(MacroInterpreter.validateStructure(scriptText));
+                    note(MacroInterpreter.validateCommands(scriptText));
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
