@@ -113,6 +113,28 @@ final class MacroInterpreter {
         flushStroke();
     }
 
+    /**
+     * Performs a non-executing check of labels and if/elseif/else/endif structure.
+     * This deliberately does not claim that every command is supported or safe to run.
+     */
+    static String validateStructure(String source) {
+        MacroInterpreter checker = new MacroInterpreter(new Host() {
+            public boolean isRunning() { return false; }
+            public void sleep(long millis) {}
+            public void log(String message) {}
+            public void touchPath(List<int[]> points, long durationMs) {}
+            public void tap(int x, int y) {}
+        });
+        try {
+            checker.compile(source);
+            return "Structure check passed ("
+                    + checker.lines.size() + " executable lines). "
+                    + "Command compatibility and game actions have NOT been tested.";
+        } catch (Exception e) {
+            return "Structure check failed: " + e.getMessage();
+        }
+    }
+
     private void compile(String source) {
         lines.clear(); originalLineNumbers.clear(); labels.clear(); falseTarget.clear(); skipTarget.clear(); branchParent.clear(); blockEnd.clear(); activeBlocks.clear();
         Deque<IfBlock> stack = new ArrayDeque<>();
