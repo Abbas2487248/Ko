@@ -8,6 +8,7 @@ import android.graphics.ColorSpace;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.view.Display;
+import android.view.Surface;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -43,7 +44,81 @@ public class MacroAccessibilityService extends AccessibilityService {
         log("Accessibility service connected. Volume + = START, Volume - = STOP.");
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) { }
+    private volatile String lastForegroundPackage = "";
+
+    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        CharSequence packageName = event.getPackageName();
+        if (packageName == null) return;
+        String currentPackage = packageName.toString();
+        if (currentPackage.equals(lastForegroundPackage)) return;
+        lastForegroundPackage = currentPackage;
+        log("FOREGROUND APP: " + currentPackage);
+        // Hay Day is diagnosed only when it enters the foreground. This path never sends touches.
+        if ("com.supercell.hayday".equals(currentPackage)) {
+            logForegroundDisplayDiagnostics(currentPackage);
+        }
+    }
+
+    /** Captures dimensions only after Hay Day enters the foreground; never dispatches a gesture. */
+    private void logForegroundDisplayDiagnostics(String packageName) {
+        android.view.Display display = null;
+        android.view.WindowManager windowManager =
+                (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        if (windowManager != null) display = windowManager.getDefaultDisplay();
+        android.util.DisplayMetrics realMetrics = new android.util.DisplayMetrics();
+        if (display != null) display.getRealMetrics(realMetrics);
+        int rotation = display == null ? -1 : display.getRotation();
+        log("GAME DISPLAY CHECK: package=" + packageName
+                + ", real display=" + realMetrics.widthPixels + "x" + realMetrics.heightPixels
+                + ", rotation=" + rotationName(rotation)
+                + ". No touch was sent.");
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            log("GAME SCREENSHOT CHECK unavailable: Android 11 or newer is required.");
+            return;
+        }
+        main.post(() -> {
+            try {
+                takeScreenshot(Display.DEFAULT_DISPLAY, command -> main.post(command),
+                        new TakeScreenshotCallback() {
+                    @Override public void onSuccess(ScreenshotResult result) {
+                        HardwareBuffer buffer = result.getHardwareBuffer();
+                        Bitmap bitmap = null;
+                        try {
+                            bitmap = Bitmap.wrapHardwareBuffer(buffer, result.getColorSpace());
+                            if (bitmap == null) {
+                                log("GAME SCREENSHOT CHECK failed: Android returned an empty image.");
+                            } else {
+                                log("GAME SCREENSHOT CHECK: " + bitmap.getWidth() + "x"
+                                        + bitmap.getHeight() + ", rotation=" + rotationName(rotation)
+                                        + ". No touch was sent.");
+                            }
+                        } catch (Exception e) {
+                            log("GAME SCREENSHOT CHECK failed: " + e.getMessage());
+                        } finally {
+                            if (bitmap != null) bitmap.recycle();
+                            if (buffer != null) buffer.close();
+                        }
+                    }
+                    @Override public void onFailure(int errorCode) {
+                        log("GAME SCREENSHOT CHECK failed (Android error " + errorCode + ").");
+                    }
+                });
+            } catch (Exception e) {
+                log("GAME SCREENSHOT CHECK failed: " + e.getMessage());
+            }
+        });
+    }
+
+    private static String rotationName(int rotation) {
+        switch (rotation) {
+            case Surface.ROTATION_0: return "0";
+            case Surface.ROTATION_90: return "90";
+            case Surface.ROTATION_180: return "180";
+            case Surface.ROTATION_270: return "270";
+            default: return "unknown";
+        }
+    }
 
     @Override public boolean onKeyEvent(KeyEvent event) {
         int key = event.getKeyCode();
