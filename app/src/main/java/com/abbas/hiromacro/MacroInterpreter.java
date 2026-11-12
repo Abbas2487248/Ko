@@ -24,6 +24,7 @@ final class MacroInterpreter {
     private final Map<Integer, Integer> blockEnd = new HashMap<>();
     private final Set<Integer> activeBlocks = new HashSet<>();
     private final List<String> lines = new ArrayList<>();
+    private final List<Integer> originalLineNumbers = new ArrayList<>();
     private final List<int[]> strokePoints = new ArrayList<>();
     private long strokeDuration = 1;
 
@@ -59,7 +60,7 @@ final class MacroInterpreter {
             } else if (lower.startsWith("goto ")) {
                 String label = line.substring(5).trim();
                 Integer target = labels.get(label.toLowerCase(Locale.ROOT));
-                if (target == null) throw new IllegalArgumentException("Unknown label " + label + " at line " + (pc + 1));
+                if (target == null) throw new IllegalArgumentException("Unknown label " + label + " at line " + sourceLine(pc));
                 pc = target;
             } else if (lower.startsWith("sleep ")) {
                 long ms = Math.max(0L, Math.min(60000L, Math.round(expression(line.substring(6)))));
@@ -68,24 +69,24 @@ final class MacroInterpreter {
                 pc++;
             } else if (lower.startsWith("touchdown ")) {
                 String[] a = args(line.substring(10));
-                if (a.length != 3) throw new IllegalArgumentException("touchDown needs: id x y (line " + (pc + 1) + ")");
+                if (a.length != 3) throw new IllegalArgumentException("touchDown needs: id x y (line " + sourceLine(pc) + ")");
                 flushStroke();
                 strokePoints.add(new int[]{integer(a[1]), integer(a[2])});
                 strokeDuration = 1;
                 pc++;
             } else if (lower.startsWith("touchmove ")) {
                 String[] a = args(line.substring(10));
-                if (a.length != 3) throw new IllegalArgumentException("touchMove needs: id x y (line " + (pc + 1) + ")");
-                if (strokePoints.isEmpty()) throw new IllegalStateException("touchMove without touchDown at line " + (pc + 1));
+                if (a.length != 3) throw new IllegalArgumentException("touchMove needs: id x y (line " + sourceLine(pc) + ")");
+                if (strokePoints.isEmpty()) throw new IllegalStateException("touchMove without touchDown at line " + sourceLine(pc));
                 strokePoints.add(new int[]{integer(a[1]), integer(a[2])});
                 pc++;
             } else if (lower.equals("touchup") || lower.startsWith("touchup ")) {
-                if (strokePoints.isEmpty()) throw new IllegalStateException("touchUp without touchDown at line " + (pc + 1));
+                if (strokePoints.isEmpty()) throw new IllegalStateException("touchUp without touchDown at line " + sourceLine(pc));
                 flushStroke();
                 pc++;
             } else if (lower.startsWith("touchpress ")) {
                 String[] a = args(line.substring(11));
-                if (a.length != 2) throw new IllegalArgumentException("touchpress needs x y at line " + (pc + 1));
+                if (a.length != 2) throw new IllegalArgumentException("touchpress needs x y at line " + sourceLine(pc));
                 flushStroke();
                 host.tap(integer(a[0]), integer(a[1]));
                 pc++;
@@ -99,21 +100,21 @@ final class MacroInterpreter {
                 int eq = line.indexOf('=');
                 String name = line.substring(0, eq).trim().substring(1).toLowerCase(Locale.ROOT);
                 if (name.equals("red") || name.equals("green") || name.equals("blue")) {
-                    throw new IllegalArgumentException("Pixel variable #" + name + " needs screen-color detection, which is not implemented yet (line " + (pc + 1) + ").");
+                    throw new IllegalArgumentException("Pixel variable #" + name + " cannot be assigned: screen-color detection is disabled (line " + sourceLine(pc) + ").");
                 }
                 vars.put(name, expression(line.substring(eq + 1)));
                 pc++;
             } else if (lower.startsWith("device:") || lower.startsWith("screen_size:")) {
                 pc++;
             } else {
-                throw new IllegalArgumentException("Unsupported or malformed command at line " + (pc + 1) + ": " + line);
+                throw new IllegalArgumentException("Unsupported or malformed command at line " + sourceLine(pc) + ": " + line);
             }
         }
         flushStroke();
     }
 
     private void compile(String source) {
-        lines.clear(); labels.clear(); falseTarget.clear(); skipTarget.clear(); branchParent.clear(); blockEnd.clear(); activeBlocks.clear();
+        lines.clear(); originalLineNumbers.clear(); labels.clear(); falseTarget.clear(); skipTarget.clear(); branchParent.clear(); blockEnd.clear(); activeBlocks.clear();
         Deque<IfBlock> stack = new ArrayDeque<>();
         String[] sourceLines = source.split("\\r?\\n");
         for (String raw : sourceLines) {
@@ -133,21 +134,21 @@ final class MacroInterpreter {
             if (l.startsWith("if ")) {
                 stack.push(new IfBlock(i));
             } else if (l.startsWith("elseif ")) {
-                if (stack.isEmpty()) throw new IllegalArgumentException("elseif without if at line " + (i + 1));
+                if (stack.isEmpty()) throw new IllegalArgumentException("elseif without if at line " + originalLineNumbers.get(i));
                 IfBlock b = stack.peek();
                 b.branches.add(i);
                 branchParent.put(i, b.first);
                 falseTarget.put(b.lastBranch, i);
                 b.lastBranch = i;
             } else if (l.equals("else")) {
-                if (stack.isEmpty()) throw new IllegalArgumentException("else without if at line " + (i + 1));
+                if (stack.isEmpty()) throw new IllegalArgumentException("else without if at line " + originalLineNumbers.get(i));
                 IfBlock b = stack.peek();
                 branchParent.put(i, b.first);
                 falseTarget.put(b.lastBranch, i);
                 b.lastBranch = i;
                 b.hasElse = true;
             } else if (l.equals("endif")) {
-                if (stack.isEmpty()) throw new IllegalArgumentException("endif without if at line " + (i + 1));
+                if (stack.isEmpty()) throw new IllegalArgumentException("endif without if at line " + originalLineNumbers.get(i));
                 IfBlock b = stack.pop();
                 blockEnd.put(b.first, i + 1);
                 falseTarget.put(b.lastBranch, i + 1);
@@ -156,7 +157,7 @@ final class MacroInterpreter {
                 
             }
         }
-        if (!stack.isEmpty()) throw new IllegalArgumentException("Missing endif for if at line " + (stack.peek().first + 1));
+        if (!stack.isEmpty()) throw new IllegalArgumentException("Missing endif for if at line " + originalLineNumbers.get(stack.peek().first));
         // Each conditional branch jumps past the rest of its chain when it evaluates true.
         for (int i = 0; i < lines.size(); i++) {
             String l = lines.get(i).toLowerCase(Locale.ROOT);
@@ -174,7 +175,7 @@ final class MacroInterpreter {
         }
     }
 
-    private static final class IfBlock {
+    private int sourceLine(int programCounter) {\n        if (programCounter < 0 || programCounter >= originalLineNumbers.size()) return programCounter + 1;\n        return originalLineNumbers.get(programCounter);\n    }\n\n    private static final class IfBlock {
         final int first;
         int lastBranch;
         boolean hasElse;
