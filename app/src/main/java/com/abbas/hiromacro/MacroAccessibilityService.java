@@ -31,6 +31,7 @@ public class MacroAccessibilityService extends AccessibilityService {
     private ExecutorService executor;
     private volatile boolean running;
     private volatile long runGeneration;
+    private volatile long loadGeneration;
     private Future<?> task;
 
     public static MacroAccessibilityService getInstance() { return instance; }
@@ -65,7 +66,7 @@ public class MacroAccessibilityService extends AccessibilityService {
 
     private void startSelectedScript() {
         final long requestGeneration;
-        synchronized (this) { requestGeneration = ++runGeneration; }
+        synchronized (this) { requestGeneration = ++loadGeneration; }
         String savedUri = getSharedPreferences("hiromacro", MODE_PRIVATE)
                 .getString("selected_script_uri", null);
         if (savedUri == null || savedUri.isEmpty()) {
@@ -86,7 +87,7 @@ public class MacroAccessibilityService extends AccessibilityService {
                     return;
                 }
                 synchronized (MacroAccessibilityService.this) {
-                    if (runGeneration != requestGeneration) {
+                    if (loadGeneration != requestGeneration) {
                         log("Script start cancelled before loading completed.");
                         return;
                     }
@@ -112,6 +113,7 @@ public class MacroAccessibilityService extends AccessibilityService {
     public synchronized void stopScript() {
         running = false;
         ++runGeneration;
+        ++loadGeneration;
         if (task != null) task.cancel(true);
         releaseExecutor();
         log("Stop requested.");
